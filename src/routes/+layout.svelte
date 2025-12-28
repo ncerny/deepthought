@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../app.css';
+	import { base } from '$app/paths';
 	import AudioController from '$lib/components/AudioController.svelte';
 	import AmbientGlow from '$lib/components/AmbientGlow.svelte';
 
@@ -9,6 +10,9 @@
 <svelte:head>
 	<meta name="description" content="Ask Deep Thought, the second greatest computer in the Universe of Time and Space, your most profound questions." />
 	<title>Deep Thought</title>
+	<link rel="icon" type="image/png" sizes="32x32" href="{base}/favicon-32x32.png" />
+	<link rel="icon" type="image/png" sizes="16x16" href="{base}/favicon-16x16.png" />
+	<link rel="apple-touch-icon" sizes="180x180" href="{base}/apple-touch-icon.png" />
 </svelte:head>
 
 <AmbientGlow />
