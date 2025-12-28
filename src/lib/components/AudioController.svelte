@@ -7,8 +7,14 @@
 	let isPlaying = $state(false);
 
 	let audioContext: AudioContext | null = null;
-	let oscillator: OscillatorNode | null = null;
+	let oscillator1: OscillatorNode | null = null;
+	let oscillator2: OscillatorNode | null = null;
 	let gainNode: GainNode | null = null;
+
+	// Base frequencies
+	const BASE_FREQ_1 = 55;  // Low A1
+	const BASE_FREQ_2 = 82.5; // E2, perfect fifth
+	const THINKING_MULTIPLIER = 1.15; // Speed up 15% when thinking
 
 	const STORAGE_KEY = 'deepthought-audio-muted';
 
@@ -22,12 +28,12 @@
 		}
 	});
 
-	// Subscribe to phase changes
+	// Subscribe to phase changes - adjust pitch when thinking
 	const unsubPhase = phase.subscribe((p) => {
 		if (p === 'thinking') {
-			startAudio();
+			setThinkingMode(true);
 		} else {
-			stopAudio();
+			setThinkingMode(false);
 		}
 	});
 
@@ -49,7 +55,7 @@
 	}
 
 	function startAudio() {
-		if (!browser || isMuted) return;
+		if (!browser || isPlaying) return;
 
 		initAudio();
 		if (!audioContext || !gainNode) return;
@@ -60,22 +66,22 @@
 		}
 
 		// Create a deep ambient drone
-		oscillator = audioContext.createOscillator();
-		oscillator.type = 'sine';
-		oscillator.frequency.value = 55; // Low A1
+		oscillator1 = audioContext.createOscillator();
+		oscillator1.type = 'sine';
+		oscillator1.frequency.value = BASE_FREQ_1;
 
-		// Add a second oscillator for richness
-		const oscillator2 = audioContext.createOscillator();
+		// Second oscillator for richness
+		oscillator2 = audioContext.createOscillator();
 		oscillator2.type = 'sine';
-		oscillator2.frequency.value = 82.5; // E2, perfect fifth above
+		oscillator2.frequency.value = BASE_FREQ_2;
 
 		// Create gain nodes for mixing
 		const gain1 = audioContext.createGain();
 		const gain2 = audioContext.createGain();
-		gain1.gain.value = 0.15;
-		gain2.gain.value = 0.08;
+		gain1.gain.value = 0.12;
+		gain2.gain.value = 0.06;
 
-		oscillator.connect(gain1);
+		oscillator1.connect(gain1);
 		oscillator2.connect(gain2);
 		gain1.connect(gainNode);
 		gain2.connect(gainNode);
@@ -84,29 +90,40 @@
 		gainNode.gain.setValueAtTime(0, audioContext.currentTime);
 		gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.5);
 
-		oscillator.start();
+		oscillator1.start();
 		oscillator2.start();
 		isPlaying = true;
-
-		// Store reference to stop later
-		(oscillator as any)._companion = oscillator2;
 	}
 
 	function stopAudio() {
-		if (!audioContext || !gainNode || !oscillator) return;
+		if (!audioContext || !gainNode || !isPlaying) return;
 
 		// Fade out
 		gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
 
 		// Stop oscillators after fade
 		setTimeout(() => {
-			if (oscillator) {
-				oscillator.stop();
-				(oscillator as any)._companion?.stop();
-				oscillator = null;
+			if (oscillator1) {
+				oscillator1.stop();
+				oscillator1 = null;
+			}
+			if (oscillator2) {
+				oscillator2.stop();
+				oscillator2 = null;
 			}
 			isPlaying = false;
 		}, 300);
+	}
+
+	function setThinkingMode(thinking: boolean) {
+		if (!oscillator1 || !oscillator2 || !audioContext) return;
+
+		const multiplier = thinking ? THINKING_MULTIPLIER : 1;
+		const transitionTime = audioContext.currentTime + 0.3;
+
+		// Smoothly transition frequencies
+		oscillator1.frequency.linearRampToValueAtTime(BASE_FREQ_1 * multiplier, transitionTime);
+		oscillator2.frequency.linearRampToValueAtTime(BASE_FREQ_2 * multiplier, transitionTime);
 	}
 
 	function handleClick() {
@@ -115,39 +132,16 @@
 			localStorage.setItem(STORAGE_KEY, String(isMuted));
 		}
 
-		if (isMuted && isPlaying) {
+		if (isMuted) {
 			stopAudio();
-		} else if (!isMuted) {
-			// Initialize audio context on user gesture (required by browsers)
+		} else {
+			// Initialize and start audio on user gesture (required by browsers)
 			initAudio();
 			if (audioContext && audioContext.state === 'suspended') {
 				audioContext.resume();
 			}
-			// Play a brief confirmation tone
-			playConfirmTone();
+			startAudio();
 		}
-	}
-
-	function playConfirmTone() {
-		if (!audioContext || !gainNode) return;
-
-		const osc = audioContext.createOscillator();
-		const gain = audioContext.createGain();
-
-		osc.type = 'sine';
-		osc.frequency.value = 220; // A3
-		gain.gain.value = 0.1;
-
-		osc.connect(gain);
-		gain.connect(audioContext.destination);
-
-		// Quick fade in/out
-		gain.gain.setValueAtTime(0, audioContext.currentTime);
-		gain.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.05);
-		gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
-
-		osc.start();
-		osc.stop(audioContext.currentTime + 0.3);
 	}
 </script>
 
