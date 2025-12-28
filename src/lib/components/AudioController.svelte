@@ -3,7 +3,6 @@
 	import { browser } from '$app/environment';
 	import { phase } from '$lib/stores/appState';
 
-	let isMuted = $state(true);
 	let isPlaying = $state(false);
 
 	let audioContext: AudioContext | null = null;
@@ -16,16 +15,9 @@
 	const BASE_FREQ_2 = 82.5; // E2, perfect fifth
 	const THINKING_MULTIPLIER = 1.15; // Speed up 15% when thinking
 
-	const STORAGE_KEY = 'deepthought-audio-muted';
-
-	// Load preference from localStorage
 	onMount(() => {
-		if (browser) {
-			const stored = localStorage.getItem(STORAGE_KEY);
-			if (stored !== null) {
-				isMuted = stored === 'true';
-			}
-		}
+		// Audio always starts stopped after page load (browser requirement)
+		// No localStorage persistence - user must click to enable each session
 	});
 
 	// Subscribe to phase changes - adjust pitch when thinking
@@ -123,20 +115,10 @@
 	}
 
 	function handleClick() {
-		if (isMuted) {
-			// Currently muted, user wants to enable
-			isMuted = false;
-			if (browser) {
-				localStorage.setItem(STORAGE_KEY, 'false');
-			}
-			startAudio();
-		} else {
-			// Currently playing, user wants to mute
-			isMuted = true;
-			if (browser) {
-				localStorage.setItem(STORAGE_KEY, 'true');
-			}
+		if (isPlaying) {
 			stopAudio();
+		} else {
+			startAudio();
 		}
 	}
 </script>
@@ -145,10 +127,10 @@
 	class="audio-toggle"
 	type="button"
 	onclick={handleClick}
-	aria-label={isMuted ? 'Enable ambient sound' : 'Mute ambient sound'}
-	title={isMuted ? 'Enable sound' : 'Mute sound'}
+	aria-label={isPlaying ? 'Mute ambient sound' : 'Enable ambient sound'}
+	title={isPlaying ? 'Mute sound' : 'Enable sound'}
 >
-	{#if isMuted}
+	{#if !isPlaying}
 		<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 			<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
 			<line x1="23" y1="9" x2="17" y2="15"></line>
