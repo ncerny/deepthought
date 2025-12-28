@@ -54,15 +54,15 @@ function createAppState() {
 
 /**
  * Calculate thinking duration based on question length
- * Base: 2 seconds
- * Add: 0.5 seconds per 10 characters
- * Max: 10 seconds
+ * Base: 4 seconds
+ * Add: 1 second per 10 characters
+ * Max: 20 seconds
  */
 function calculateThinkDuration(question: string): number {
-	const baseTime = 2000; // 2 seconds in ms
-	const charBonus = Math.floor(question.length / 10) * 500; // 0.5s per 10 chars
+	const baseTime = 4000; // 4 seconds in ms
+	const charBonus = Math.floor(question.length / 10) * 1000; // 1s per 10 chars
 	const total = baseTime + charBonus;
-	return Math.min(total, 10000); // Cap at 10 seconds
+	return Math.min(total, 20000); // Cap at 20 seconds
 }
 
 export const appState = createAppState();
