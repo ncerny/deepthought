@@ -2,8 +2,10 @@
 	import { onMount } from 'svelte';
 	import { appState, question } from '$lib/stores/appState';
 	import { getRandomAnswer } from '$lib/data/answers';
+	import { API_URL } from '$lib/config';
 
 	let answer = $state('');
+	let explanation = $state('');
 	let showAskAgain = $state(false);
 	let userQuestion = $state('');
 
@@ -15,6 +17,11 @@
 	onMount(() => {
 		answer = getRandomAnswer();
 
+		// Fetch AI explanation after a short delay
+		setTimeout(() => {
+			fetchExplanation(userQuestion);
+		}, 1000);
+
 		// Show "ask again" prompt after a delay
 		setTimeout(() => {
 			showAskAgain = true;
@@ -24,6 +31,51 @@
 			unsubQuestion();
 		};
 	});
+
+	async function fetchExplanation(questionText: string) {
+		if (!questionText) return;
+
+		try {
+			const response = await fetch(`${API_URL}/api/explain`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ question: questionText }),
+			});
+
+			if (!response.ok || !response.body) return;
+
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = '';
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n\n');
+				buffer = lines.pop() || '';
+
+				for (const line of lines) {
+					if (line.startsWith('data: ')) {
+						const data = line.slice(6);
+						if (data === '[DONE]') continue;
+
+						try {
+							const parsed = JSON.parse(data);
+							if (parsed.content) {
+								explanation += parsed.content;
+							}
+						} catch {
+							// Skip malformed JSON
+						}
+					}
+				}
+			}
+		} catch {
+			// Silent failure - user just sees the answer without explanation
+		}
+	}
 
 	function handleAskAgain() {
 		appState.reset();
@@ -42,6 +94,12 @@
 	<p class="voice voice-large answer fade-in glow">
 		{answer}
 	</p>
+
+	{#if explanation}
+		<p class="explanation fade-in">
+			{explanation}
+		</p>
+	{/if}
 
 	{#if showAskAgain}
 		<button class="ask-again fade-in" onclick={handleAskAgain}>
@@ -82,6 +140,15 @@
 
 	.answer {
 		margin: var(--spacing-sm) 0;
+	}
+
+	.explanation {
+		font-style: italic;
+		font-size: 1rem;
+		color: var(--color-muted);
+		max-width: 500px;
+		line-height: 1.6;
+		text-align: center;
 	}
 
 	.ask-again {
