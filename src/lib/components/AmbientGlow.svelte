@@ -17,14 +17,15 @@
 	onMount(() => {
 		if (!browser) return;
 
-		// Spawn an orb every 1-2 seconds
+		// Spawn an orb every ~1 second
 		interval = setInterval(() => {
 			spawnOrb();
-		}, 1500);
+		}, 1000);
 
 		// Spawn a few initial orbs
 		spawnOrb();
-		setTimeout(() => spawnOrb(), 500);
+		setTimeout(() => spawnOrb(), 300);
+		setTimeout(() => spawnOrb(), 600);
 	});
 
 	onDestroy(() => {
