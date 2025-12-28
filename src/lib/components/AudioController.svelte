@@ -109,7 +109,7 @@
 		}, 300);
 	}
 
-	function toggleMute() {
+	function handleClick() {
 		isMuted = !isMuted;
 		if (browser) {
 			localStorage.setItem(STORAGE_KEY, String(isMuted));
@@ -123,7 +123,8 @@
 
 <button
 	class="audio-toggle"
-	onclick={toggleMute}
+	type="button"
+	onclick={handleClick}
 	aria-label={isMuted ? 'Enable ambient sound' : 'Mute ambient sound'}
 	title={isMuted ? 'Enable sound' : 'Mute sound'}
 >
@@ -144,10 +145,10 @@
 <style>
 	.audio-toggle {
 		position: fixed;
-		bottom: var(--spacing-md);
-		right: var(--spacing-md);
-		padding: var(--spacing-xs);
-		background: transparent;
+		bottom: 1rem;
+		right: 1rem;
+		padding: 0.5rem;
+		background: var(--color-bg);
 		border: 1px solid var(--color-muted);
 		border-radius: 4px;
 		color: var(--color-muted);
@@ -156,10 +157,16 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		z-index: 100;
 	}
 
 	.audio-toggle:hover {
 		border-color: var(--color-accent);
 		color: var(--color-accent);
+	}
+
+	.audio-toggle:focus {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
 	}
 </style>

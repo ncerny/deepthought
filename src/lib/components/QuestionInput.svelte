@@ -37,7 +37,7 @@
 			aria-label="Your question for Deep Thought"
 		></textarea>
 
-		<button type="submit" disabled={!question.trim()}>
+		<button type="submit" disabled={!question.trim()} aria-label="Submit your question">
 			<span class="voice">Ponder</span>
 		</button>
 	</form>
