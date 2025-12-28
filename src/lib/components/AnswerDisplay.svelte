@@ -1,81 +1,50 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { appState, question } from '$lib/stores/appState';
-	import { getRandomAnswer } from '$lib/data/answers';
-	import { API_URL } from '$lib/config';
+	import { onMount, onDestroy } from 'svelte';
+	import { appState, question, aiResponse, isStreaming } from '$lib/stores/appState';
 
-	let answer = $state('');
-	let explanation = $state('');
 	let showAskAgain = $state(false);
 	let userQuestion = $state('');
+	let response = $state('');
+	let streaming = $state(false);
 
-	// Subscribe to the question
+	// Subscribe to stores
 	const unsubQuestion = question.subscribe((q) => {
 		userQuestion = q;
 	});
 
+	const unsubResponse = aiResponse.subscribe((r) => {
+		response = r;
+	});
+
+	const unsubStreaming = isStreaming.subscribe((s) => {
+		streaming = s;
+	});
+
 	onMount(() => {
-		answer = getRandomAnswer();
+		// Show "ask again" prompt after streaming completes or after delay
+		const checkInterval = setInterval(() => {
+			if (!streaming && response) {
+				showAskAgain = true;
+				clearInterval(checkInterval);
+			}
+		}, 500);
 
-		// Fetch AI explanation after a short delay
-		setTimeout(() => {
-			fetchExplanation(userQuestion);
-		}, 1000);
-
-		// Show "ask again" prompt after a delay
+		// Fallback: show after 10 seconds regardless
 		setTimeout(() => {
 			showAskAgain = true;
-		}, 2000);
+			clearInterval(checkInterval);
+		}, 10000);
 
 		return () => {
-			unsubQuestion();
+			clearInterval(checkInterval);
 		};
 	});
 
-	async function fetchExplanation(questionText: string) {
-		if (!questionText) return;
-
-		try {
-			const response = await fetch(`${API_URL}/api/explain`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ question: questionText }),
-			});
-
-			if (!response.ok || !response.body) return;
-
-			const reader = response.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = '';
-
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-
-				buffer += decoder.decode(value, { stream: true });
-				const lines = buffer.split('\n\n');
-				buffer = lines.pop() || '';
-
-				for (const line of lines) {
-					if (line.startsWith('data: ')) {
-						const data = line.slice(6);
-						if (data === '[DONE]') continue;
-
-						try {
-							const parsed = JSON.parse(data);
-							if (parsed.content) {
-								explanation += parsed.content;
-							}
-						} catch {
-							// Skip malformed JSON
-						}
-					}
-				}
-			}
-		} catch {
-			// Silent failure - user just sees the answer without explanation
-		}
-	}
+	onDestroy(() => {
+		unsubQuestion();
+		unsubResponse();
+		unsubStreaming();
+	});
 
 	function handleAskAgain() {
 		appState.reset();
@@ -91,15 +60,9 @@
 		</p>
 	{/if}
 
-	<p class="voice voice-large answer fade-in glow">
-		{answer}
+	<p class="voice answer fade-in">
+		{response}{#if streaming}<span class="cursor">|</span>{/if}
 	</p>
-
-	{#if explanation}
-		<p class="explanation fade-in">
-			{explanation}
-		</p>
-	{/if}
 
 	{#if showAskAgain}
 		<button class="ask-again fade-in" onclick={handleAskAgain}>
@@ -140,15 +103,19 @@
 
 	.answer {
 		margin: var(--spacing-sm) 0;
+		max-width: 700px;
+		line-height: 1.6;
+		font-size: 1.4rem;
 	}
 
-	.explanation {
-		font-style: italic;
-		font-size: 1rem;
-		color: var(--color-muted);
-		max-width: 500px;
-		line-height: 1.6;
-		text-align: center;
+	.cursor {
+		animation: blink 0.8s infinite;
+		color: var(--color-accent);
+	}
+
+	@keyframes blink {
+		0%, 50% { opacity: 1; }
+		51%, 100% { opacity: 0; }
 	}
 
 	.ask-again {

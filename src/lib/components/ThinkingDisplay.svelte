@@ -1,18 +1,19 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { appState, thinkDuration } from '$lib/stores/appState';
+	import { appState, question } from '$lib/stores/appState';
 	import { getMusingSequence } from '$lib/data/musings';
+	import { getRandomAnswer } from '$lib/data/answers';
+	import { API_URL } from '$lib/config';
 
 	let currentMusing = $state('');
 	let musingIndex = $state(0);
 	let musings: string[] = [];
 	let musingInterval: ReturnType<typeof setInterval>;
-	let thinkTimeout: ReturnType<typeof setTimeout>;
 
-	// Subscribe to think duration
-	let duration = 0;
-	const unsubDuration = thinkDuration.subscribe((d) => {
-		duration = d;
+	// Subscribe to question
+	let userQuestion = '';
+	const unsubQuestion = question.subscribe((q) => {
+		userQuestion = q;
 	});
 
 	onMount(() => {
@@ -26,17 +27,109 @@
 			currentMusing = musings[musingIndex];
 		}, 2500);
 
-		// Transition to answer after think duration
-		thinkTimeout = setTimeout(() => {
-			appState.showAnswer();
-		}, duration);
+		// Start fetching AI response immediately
+		fetchAIResponse(userQuestion);
 	});
 
 	onDestroy(() => {
 		clearInterval(musingInterval);
-		clearTimeout(thinkTimeout);
-		unsubDuration();
+		unsubQuestion();
 	});
+
+	// Delay helper for dramatic effect
+	function sleep(ms: number): Promise<void> {
+		return new Promise(resolve => setTimeout(resolve, ms));
+	}
+
+	async function fetchAIResponse(questionText: string) {
+		if (!questionText) {
+			appState.setFallbackResponse(getRandomAnswer());
+			return;
+		}
+
+		try {
+			const response = await fetch(`${API_URL}/api/explain`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ question: questionText }),
+			});
+
+			if (!response.ok || !response.body) {
+				appState.setFallbackResponse(getRandomAnswer());
+				return;
+			}
+
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = '';
+			let firstChunk = true;
+
+			// Queue to buffer incoming chunks for controlled release
+			const textQueue: string[] = [];
+			let doneReading = false;
+
+			// Read stream into queue
+			(async () => {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) {
+						doneReading = true;
+						break;
+					}
+
+					buffer += decoder.decode(value, { stream: true });
+					const lines = buffer.split('\n\n');
+					buffer = lines.pop() || '';
+
+					for (const line of lines) {
+						if (line.startsWith('data: ')) {
+							const data = line.slice(6);
+							if (data === '[DONE]') continue;
+
+							try {
+								const parsed = JSON.parse(data);
+								if (parsed.content) {
+									textQueue.push(parsed.content);
+								}
+							} catch {
+								// Skip malformed JSON
+							}
+						}
+					}
+				}
+			})();
+
+			// Release text with dramatic delays
+			while (!doneReading || textQueue.length > 0) {
+				if (textQueue.length > 0) {
+					const chunk = textQueue.shift()!;
+
+					if (firstChunk) {
+						// First content - transition to answer phase
+						appState.startStreaming();
+						firstChunk = false;
+					}
+
+					// Output character by character for dramatic effect
+					for (const char of chunk) {
+						appState.appendResponse(char);
+						// Variable delay: longer for punctuation, shorter for letters
+						const delay = '.!?,;:'.includes(char) ? 150 :
+						              char === ' ' ? 40 : 30;
+						await sleep(delay);
+					}
+				} else {
+					// Wait for more content
+					await sleep(50);
+				}
+			}
+
+			appState.finishStreaming();
+		} catch {
+			// API failed - use fallback
+			appState.setFallbackResponse(getRandomAnswer());
+		}
+	}
 </script>
 
 <div class="thinking-container" role="status" aria-live="polite">

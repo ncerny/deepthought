@@ -6,12 +6,16 @@ export interface AppState {
 	phase: Phase;
 	question: string;
 	thinkDuration: number;
+	aiResponse: string;
+	isStreaming: boolean;
 }
 
 const initialState: AppState = {
 	phase: 'idle',
 	question: '',
-	thinkDuration: 0
+	thinkDuration: 0,
+	aiResponse: '',
+	isStreaming: false
 };
 
 function createAppState() {
@@ -44,6 +48,48 @@ function createAppState() {
 		},
 
 		/**
+		 * Start streaming AI response
+		 */
+		startStreaming: () => {
+			update((state) => ({
+				...state,
+				isStreaming: true,
+				phase: 'answer'
+			}));
+		},
+
+		/**
+		 * Append to AI response
+		 */
+		appendResponse: (text: string) => {
+			update((state) => ({
+				...state,
+				aiResponse: state.aiResponse + text
+			}));
+		},
+
+		/**
+		 * Finish streaming
+		 */
+		finishStreaming: () => {
+			update((state) => ({
+				...state,
+				isStreaming: false
+			}));
+		},
+
+		/**
+		 * Set fallback response (when API fails)
+		 */
+		setFallbackResponse: (response: string) => {
+			update((state) => ({
+				...state,
+				aiResponse: response,
+				phase: 'answer'
+			}));
+		},
+
+		/**
 		 * Reset to idle state for a new question
 		 */
 		reset: () => {
@@ -71,3 +117,5 @@ export const appState = createAppState();
 export const phase = derived(appState, ($state) => $state.phase);
 export const question = derived(appState, ($state) => $state.question);
 export const thinkDuration = derived(appState, ($state) => $state.thinkDuration);
+export const aiResponse = derived(appState, ($state) => $state.aiResponse);
+export const isStreaming = derived(appState, ($state) => $state.isStreaming);

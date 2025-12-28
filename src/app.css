@@ -42,7 +42,7 @@
 }
 
 html {
-	font-size: 16px;
+	font-size: 18px;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
@@ -68,17 +68,17 @@ body {
 }
 
 .voice-large {
-	font-size: clamp(1.5rem, 4vw, 2.5rem);
+	font-size: clamp(1.75rem, 5vw, 3rem);
 	line-height: 1.4;
 }
 
 .voice-medium {
-	font-size: clamp(1.25rem, 3vw, 1.75rem);
+	font-size: clamp(1.5rem, 4vw, 2rem);
 	line-height: 1.5;
 }
 
 .voice-small {
-	font-size: clamp(1rem, 2.5vw, 1.25rem);
+	font-size: clamp(1.125rem, 3vw, 1.5rem);
 	line-height: 1.6;
 }
 
