@@ -18,12 +18,28 @@
 
 	const STORAGE_KEY = 'deepthought-audio-muted';
 
-	// Load preference from localStorage
+	// Load preference from localStorage and resume audio if enabled
 	onMount(() => {
 		if (browser) {
 			const stored = localStorage.getItem(STORAGE_KEY);
 			if (stored !== null) {
 				isMuted = stored === 'true';
+			}
+
+			// If audio was enabled, try to resume it
+			// This may work if user has interacted with site before
+			if (!isMuted) {
+				initAudio();
+				if (audioContext) {
+					// Try to resume - will work if browser allows
+					audioContext.resume().then(() => {
+						if (audioContext?.state === 'running') {
+							startAudio();
+						}
+					}).catch(() => {
+						// Autoplay blocked - user will need to click toggle
+					});
+				}
 			}
 		}
 	});
