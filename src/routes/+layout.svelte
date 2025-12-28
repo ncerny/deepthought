@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import AudioController from '$lib/components/AudioController.svelte';
+	import AmbientGlow from '$lib/components/AmbientGlow.svelte';
 
 	let { children } = $props();
 </script>
@@ -9,6 +10,8 @@
 	<meta name="description" content="Ask Deep Thought, the second greatest computer in the Universe of Time and Space, your most profound questions." />
 	<title>Deep Thought</title>
 </svelte:head>
+
+<AmbientGlow />
 
 <main>
 	{@render children()}
