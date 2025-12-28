@@ -117,7 +117,37 @@
 
 		if (isMuted && isPlaying) {
 			stopAudio();
+		} else if (!isMuted) {
+			// Initialize audio context on user gesture (required by browsers)
+			initAudio();
+			if (audioContext && audioContext.state === 'suspended') {
+				audioContext.resume();
+			}
+			// Play a brief confirmation tone
+			playConfirmTone();
 		}
+	}
+
+	function playConfirmTone() {
+		if (!audioContext || !gainNode) return;
+
+		const osc = audioContext.createOscillator();
+		const gain = audioContext.createGain();
+
+		osc.type = 'sine';
+		osc.frequency.value = 220; // A3
+		gain.gain.value = 0.1;
+
+		osc.connect(gain);
+		gain.connect(audioContext.destination);
+
+		// Quick fade in/out
+		gain.gain.setValueAtTime(0, audioContext.currentTime);
+		gain.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.05);
+		gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+
+		osc.start();
+		osc.stop(audioContext.currentTime + 0.3);
 	}
 </script>
 
