@@ -18,28 +18,12 @@
 
 	const STORAGE_KEY = 'deepthought-audio-muted';
 
-	// Load preference from localStorage and resume audio if enabled
+	// Load preference from localStorage
 	onMount(() => {
 		if (browser) {
 			const stored = localStorage.getItem(STORAGE_KEY);
 			if (stored !== null) {
 				isMuted = stored === 'true';
-			}
-
-			// If audio was enabled, try to resume it
-			// This may work if user has interacted with site before
-			if (!isMuted) {
-				initAudio();
-				if (audioContext) {
-					// Try to resume - will work if browser allows
-					audioContext.resume().then(() => {
-						if (audioContext?.state === 'running') {
-							startAudio();
-						}
-					}).catch(() => {
-						// Autoplay blocked - user will need to click toggle
-					});
-				}
 			}
 		}
 	});
@@ -55,31 +39,36 @@
 
 	onDestroy(() => {
 		unsubPhase();
-		stopAudio();
-		if (audioContext) {
-			audioContext.close();
-		}
+		cleanupAudio();
 	});
 
-	function initAudio() {
-		if (!browser || audioContext) return;
-
-		audioContext = new AudioContext();
-		gainNode = audioContext.createGain();
-		gainNode.gain.value = 0;
-		gainNode.connect(audioContext.destination);
+	function cleanupAudio() {
+		if (oscillator1) {
+			try { oscillator1.stop(); } catch {}
+			oscillator1 = null;
+		}
+		if (oscillator2) {
+			try { oscillator2.stop(); } catch {}
+			oscillator2 = null;
+		}
+		if (audioContext) {
+			try { audioContext.close(); } catch {}
+			audioContext = null;
+		}
+		gainNode = null;
+		isPlaying = false;
 	}
 
 	function startAudio() {
 		if (!browser || isPlaying) return;
 
-		initAudio();
-		if (!audioContext || !gainNode) return;
+		// Always create fresh audio context
+		cleanupAudio();
 
-		// Resume context if suspended (browser autoplay policy)
-		if (audioContext.state === 'suspended') {
-			audioContext.resume();
-		}
+		audioContext = new AudioContext();
+		gainNode = audioContext.createGain();
+		gainNode.gain.value = 0;
+		gainNode.connect(audioContext.destination);
 
 		// Create a deep ambient drone
 		oscillator1 = audioContext.createOscillator();
@@ -114,20 +103,11 @@
 	function stopAudio() {
 		if (!audioContext || !gainNode || !isPlaying) return;
 
-		// Fade out
+		// Fade out then cleanup
 		gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
 
-		// Stop oscillators after fade
 		setTimeout(() => {
-			if (oscillator1) {
-				oscillator1.stop();
-				oscillator1 = null;
-			}
-			if (oscillator2) {
-				oscillator2.stop();
-				oscillator2 = null;
-			}
-			isPlaying = false;
+			cleanupAudio();
 		}, 300);
 	}
 
@@ -143,20 +123,20 @@
 	}
 
 	function handleClick() {
-		isMuted = !isMuted;
-		if (browser) {
-			localStorage.setItem(STORAGE_KEY, String(isMuted));
-		}
-
 		if (isMuted) {
-			stopAudio();
-		} else {
-			// Initialize and start audio on user gesture (required by browsers)
-			initAudio();
-			if (audioContext && audioContext.state === 'suspended') {
-				audioContext.resume();
+			// Currently muted, user wants to enable
+			isMuted = false;
+			if (browser) {
+				localStorage.setItem(STORAGE_KEY, 'false');
 			}
 			startAudio();
+		} else {
+			// Currently playing, user wants to mute
+			isMuted = true;
+			if (browser) {
+				localStorage.setItem(STORAGE_KEY, 'true');
+			}
+			stopAudio();
 		}
 	}
 </script>
