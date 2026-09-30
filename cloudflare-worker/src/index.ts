@@ -1,5 +1,5 @@
 interface Env {
-  GROQ_API_KEY: string;
+  OPENROUTER_API_KEY: string;
   ALLOWED_ORIGIN: string;
 }
 
@@ -54,17 +54,17 @@ export default {
         });
       }
 
-      // Call Groq API with streaming
-      const groqResponse = await fetch(
-        'https://api.groq.com/openai/v1/chat/completions',
+      // Call OpenRouter API with streaming
+      const aiResponse = await fetch(
+        'https://openrouter.ai/api/v1/chat/completions',
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${env.GROQ_API_KEY}`,
+            Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.1-8b-instant',
+            model: 'nvidia/nemotron-3.5-lightning:free',
             messages: [
               { role: 'system', content: SYSTEM_PROMPT },
               { role: 'user', content: question },
@@ -73,18 +73,18 @@ export default {
             max_tokens: 200,
             temperature: 0.8,
           }),
-        }
+        },
       );
 
-      if (!groqResponse.ok) {
-        const error = await groqResponse.text();
-        console.error('Groq API error:', error);
+      if (!aiResponse.ok) {
+        const error = await aiResponse.text();
+        console.error('OpenRouter API error:', error);
         return new Response(
           JSON.stringify({ error: 'AI service unavailable' }),
           {
             status: 502,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
+          },
         );
       }
 
@@ -95,7 +95,7 @@ export default {
 
       // Process the stream in the background
       (async () => {
-        const reader = groqResponse.body?.getReader();
+        const reader = aiResponse.body?.getReader();
         if (!reader) {
           await writer.close();
           return;
@@ -123,7 +123,9 @@ export default {
                   const content = parsed.choices?.[0]?.delta?.content;
                   if (content) {
                     await writer.write(
-                      encoder.encode(`data: ${JSON.stringify({ content })}\n\n`)
+                      encoder.encode(
+                        `data: ${JSON.stringify({ content })}\n\n`,
+                      ),
                     );
                   }
                 } catch {
