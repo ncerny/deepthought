@@ -4,3 +4,5 @@ compatibility_date = "2024-12-18"
 
 [vars]
 ALLOWED_ORIGIN = "https://ncerny.github.io"
+# Tried in order; OpenRouter falls back to the next if one fails or is rate-limited
+MODELS = "google/gemma-4-26b-a4b-it:free,qwen/qwen3.8-27b:free,nvidia/nemotron-3.5-lightning:free"

@@ -1,6 +1,8 @@
 interface Env {
   OPENROUTER_API_KEY: string;
   ALLOWED_ORIGIN: string;
+  // Comma-separated; OpenRouter falls back through them in order
+  MODELS: string;
 }
 
 const SYSTEM_PROMPT = `You are Deep Thought from Douglas Adams' "The Hitchhiker's Guide to the Galaxy." You have spent 7.5 million years contemplating the answer to the question about life, the universe, and everything.  The Answer is Forty-Two.
@@ -19,6 +21,62 @@ Rules:
 - Responses must be grammatically correct, even if logically absurd
 
 No emojis.`;
+
+// Free models occasionally stall mid-stream without erroring
+const STALL_TIMEOUT_MS = 10_000;
+
+function aiUnavailable(corsHeaders: Record<string, string>): Response {
+  return new Response(JSON.stringify({ error: 'AI service unavailable' }), {
+    status: 502,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// Yields the content deltas from an OpenAI-style SSE stream, ending early if
+// the upstream goes quiet for longer than STALL_TIMEOUT_MS
+async function* contentChunks(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): AsyncGenerator<string> {
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      let timer = 0;
+      const stalled = new Promise<'stalled'>((resolve) => {
+        timer = setTimeout(() => resolve('stalled'), STALL_TIMEOUT_MS);
+      });
+      const result = await Promise.race([reader.read(), stalled]);
+      clearTimeout(timer);
+
+      if (result === 'stalled') {
+        console.error('OpenRouter stream stalled');
+        return;
+      }
+      if (result.done) return;
+
+      buffer += decoder.decode(result.value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          const content = parsed.choices?.[0]?.delta?.content;
+          if (content) yield content;
+        } catch {
+          // Skip malformed JSON
+        }
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -64,7 +122,7 @@ export default {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'nvidia/nemotron-3.5-lightning:free',
+            models: env.MODELS.split(',').map((m) => m.trim()),
             messages: [
               { role: 'system', content: SYSTEM_PROMPT },
               { role: 'user', content: question },
@@ -72,6 +130,9 @@ export default {
             stream: true,
             max_tokens: 200,
             temperature: 0.8,
+            // Free OpenRouter models are reasoning models; skip reasoning so the
+            // token budget goes to the visible answer
+            reasoning: { enabled: false },
           }),
         },
       );
@@ -79,60 +140,37 @@ export default {
       if (!aiResponse.ok) {
         const error = await aiResponse.text();
         console.error('OpenRouter API error:', error);
-        return new Response(
-          JSON.stringify({ error: 'AI service unavailable' }),
-          {
-            status: 502,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          },
-        );
+        return aiUnavailable(corsHeaders);
+      }
+
+      if (!aiResponse.body) {
+        return aiUnavailable(corsHeaders);
+      }
+
+      // Wait for the first piece of content before committing to a stream, so
+      // a stalled or empty upstream falls back to a 502 the client can handle
+      const chunks = contentChunks(aiResponse.body.getReader());
+      const first = await chunks.next();
+      if (first.done) {
+        console.error('OpenRouter stream produced no content');
+        return aiUnavailable(corsHeaders);
       }
 
       // Stream the response back as SSE
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
       const encoder = new TextEncoder();
+      const send = (content: string) =>
+        writer.write(
+          encoder.encode(`data: ${JSON.stringify({ content })}\n\n`),
+        );
 
-      // Process the stream in the background
+      // Process the rest of the stream in the background
       (async () => {
-        const reader = aiResponse.body?.getReader();
-        if (!reader) {
-          await writer.close();
-          return;
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = '';
-
         try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') continue;
-
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content;
-                  if (content) {
-                    await writer.write(
-                      encoder.encode(
-                        `data: ${JSON.stringify({ content })}\n\n`,
-                      ),
-                    );
-                  }
-                } catch {
-                  // Skip malformed JSON
-                }
-              }
-            }
+          await send(first.value);
+          for await (const content of chunks) {
+            await send(content);
           }
         } finally {
           await writer.write(encoder.encode('data: [DONE]\n\n'));
