@@ -39,6 +39,7 @@ async function* contentChunks(
 ): AsyncGenerator<string> {
   const decoder = new TextDecoder();
   let buffer = '';
+  let loggedModel = false;
 
   try {
     while (true) {
@@ -66,6 +67,10 @@ async function* contentChunks(
 
         try {
           const parsed = JSON.parse(data);
+          if (!loggedModel && parsed.model) {
+            console.log('Answering model:', parsed.model);
+            loggedModel = true;
+          }
           const content = parsed.choices?.[0]?.delta?.content;
           if (content) yield content;
         } catch {
@@ -112,11 +117,18 @@ export default {
         });
       }
 
-      // Call OpenRouter API with streaming
+      // Call OpenRouter API with streaming; only the wait for response
+      // headers is timed here, the body is covered by contentChunks
+      const controller = new AbortController();
+      const headersTimer = setTimeout(
+        () => controller.abort(),
+        STALL_TIMEOUT_MS,
+      );
       const aiResponse = await fetch(
         'https://openrouter.ai/api/v1/chat/completions',
         {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json',
@@ -135,7 +147,16 @@ export default {
             reasoning: { enabled: false },
           }),
         },
-      );
+      )
+        .catch((error) => {
+          console.error('OpenRouter request failed:', error);
+          return null;
+        })
+        .finally(() => clearTimeout(headersTimer));
+
+      if (!aiResponse) {
+        return aiUnavailable(corsHeaders);
+      }
 
       if (!aiResponse.ok) {
         const error = await aiResponse.text();
